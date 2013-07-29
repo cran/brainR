@@ -64,9 +64,12 @@ function GetSelectedItem() {
 function GetradioSelectedItem() {
 
 	chosen = ""
-	len = document.f1.r1.length
+	len = document.f1.r1.length;
+	if(typeof len == 'undefined') {
+		len = 1;
+	}	
 	// start with 1 because first is the brain
-	for (i = 1; i <len; i++) {
+	for (i = 0; i <len; i++) {
 		check = document.f1.r1[i].value
         	    o = eval(check);
 	            o.visible = false;
@@ -84,6 +87,23 @@ function GetradioSelectedItem() {
             o.opacity = 1;
 	}
 }
+
+function GetSliderItem(sliderID) {
+    var y = document.getElementById(sliderID);
+    var val = ['ROI' + y.value];
+	for (iroi in ROIS) {
+		o = eval(ROIS[iroi]);
+		if (ROIS[iroi] != val){
+		console.log("o = " + o);            
+		console.log("iroi = " + iroi);
+		o.visible = false;
+		// o.opacity = 1.0;
+		} else {
+			o.visible = true;
+		}
+	}    
+
+};
 		
 		  function highlight(what) {
 		    

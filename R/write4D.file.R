@@ -21,6 +21,9 @@
 #' @param index.file - template html file used
 #' @param toggle - (experimental) "checkbox" (default) or "radio" for radio or checkboxes to switch thing 
 #' @export
+#' @import rgl
+#' @import oro.nifti
+#' @import misc3d
 #' @seealso \code{\link{writeOBJ}}, \code{\link{writeSTL}}, 
 #' \code{\link{contour3d}}
 #' @return NULL
@@ -120,10 +123,11 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
     if (toggle == "radio") {
       fcn <- "GetradioSelectedItem() "
       rname <- "r1"
-      vis <- FALSE
+      ### have the first one clicked
+      vis <- ifelse(roiname == "ROI2", TRUE, FALSE)
     }      
     ret <- paste0('<Input type = ', toggle, ' Name = ', rname, " ", addto, 
-                  ' onClick = ', fcn, ifelse(vis, '"checked"', ""), 
+                  ' onClick = ', fcn, ifelse(vis, 'checked', ""), 
                   '>', caption)
     return(ret)
   }  
@@ -197,15 +201,31 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
     # print("Caption")
     # print(cap)
     ### for checkboxes
+    input = NULL
     if (iroi == 1) {
       input <- make_input(roiname=rname, caption=cap, vis=vis, toggle= "checkbox")
     } else {
-      input <- make_input(roiname=rname, caption=cap, vis=vis, toggle= toggle)
+#       print(iroi)
+      if (!(toggle %in% "slider")) {
+#         print('making input')
+        input <- make_input(roiname=rname, caption=cap,
+                            vis=vis, toggle= toggle)
+      }
     }
     inputs <- c(inputs, input)
     
     cmds <- c(cmds, "", cmd)
     
+  }
+  
+  if ((toggle %in% "slider") & nrois > 1){
+#     print(toggle)
+    inputs = c(inputs, 
+               paste0('<input id="defaultSlider" type="range" min="2" max="', 
+               nrois, 
+               '" step="1" value="2" onchange="GetSliderItem(', 
+               "'defaultSlider'", 
+               ');" />'))
   }
   
   ### add in the commands to the html
@@ -220,10 +240,8 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
   
   ## add checkboxes for control
   addbox <- grep("%ADDCHECKBOXES%", htmltmp)
+#   print(inputs)
   htmltmp <- c(htmltmp[1:(addbox-1)], inputs, htmltmp[(addbox+1):length(htmltmp)])
-  
-  
-  writeLines(htmltmp, con=outfile, sep="\n")
   
   ## put in the other xtk_edge stuff if standalone
   outdir <- dirname(outfile)
@@ -234,6 +252,8 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
                   to=file.path(outdir, "xtk_edge.js") )
     ### copy xtk_edge.js to file
   }  
+  writeLines(htmltmp, con=outfile, sep="\n")
+  
   return(invisible(NULL))
 }
   

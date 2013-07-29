@@ -12,6 +12,7 @@
 #' be the same length as scene
 #' @param captions labels for checkboxes on html webpage
 #' @param writefiles (experimental) simply run the code to create the html and not write the .obj or .stl files
+#' @param reprint (logical, experimental) do you want to reprint the rgl before saving (common use by rgl functions)
 #' @param ... other options to be passed to \link{write4D.file}
 #' @export
 #' @examples
@@ -50,12 +51,12 @@
 #' fnames <- c("brain.stl", gsub(".nii.gz", ".stl", imgs, fixed=TRUE))
 #' outfile <-  "index_4D_stl.html"
 #' write4D(scene=scene, fnames=fnames, outfile=outfile, standalone=TRUE, rescale=TRUE)
-#' # browseURL(outfile)
+#' browseURL(outfile)
 #' 
 #' @return NULL
 
 write4D <- function(scene, outfile, fnames=NULL, 
-                    captions=NULL, writefiles=TRUE, ...){
+                    captions=NULL, writefiles=TRUE, reprint=TRUE, ...){
   
   #   if (is.null(fnames) & is.null(format)){
   #     warning("No Format or filenames specified - using STL and making names")
@@ -93,10 +94,11 @@ write4D <- function(scene, outfile, fnames=NULL,
   outdir <- dirname(outfile)
   
   
-  write_output <- function(outdir, fname, fmt){
-    filename <- file.path(outdir, fname)
+  write_output <- function(outdir, fname, fmt, reprint=FALSE, ...){
+    filename <- file.path(outdir, basename(fname))
     fcn <- paste0("write", fmt)
-    do.call(fcn, list(con=filename))
+    if (fmt %in% "STL" & !reprint) fcn <- paste0("writeTriangles", fmt)
+    do.call(fcn, list(con=filename, ...))
   }
   
   getBase <- function(x, ind=1){
@@ -105,17 +107,30 @@ write4D <- function(scene, outfile, fnames=NULL,
   
   for (iroi in 1:nrois) {
     #     tryCatch(rgl.close())
-    pars <- par3d()
-    wrect <- pars$windowRect   
+    if (reprint) {
+      pars <- par3d()
+      wrect <- pars$windowRect
+    } else {
+      wrect = c(0L, 44L, 256L, 300L)
+    }
     irgl <- scene[[iroi]]
     fname <- fnames[iroi]
     fmt <- formats[iroi]    
+    fname = basename(fname)
     if (class(irgl) == "Triangles3D"){
+      lfname <- fname
+      obj.colors <- irgl$color
+      obj.opac <- irgl$alpha
+      
+      if (fmt %in% "STL" & !reprint){
+        if (!writefiles){
+          stop("Specified no reprinting but no writing files - not sure what to do")
+          }
+        write_output(outdir, fname, fmt, reprint=reprint, scene=list(irgl))
+      } else {
         drawScene.rgl(irgl)
-        lfname <- fname
-        obj.colors <- irgl$color
-        obj.opac <- irgl$alpha
-      if (writefiles) write_output(outdir, fname, fmt)
+        if (writefiles) write_output(outdir, fname, fmt, reprint=reprint)
+      }
     }
     if (class(irgl) == "list"){
       obj.colors <- sapply(irgl, function(x) x$color)
@@ -129,10 +144,18 @@ write4D <- function(scene, outfile, fnames=NULL,
       lfname <- paste0(stub, "_", nums, ".", tolower(fmt))
       for (isroi in 1:nsubrois){
           iirgl <- irgl[[isroi]]
-          drawScene.rgl(iirgl)
-          sfname <- paste0(stub, "_", nums[isroi], ".", tolower(fmt))
-          if (writefiles) {
-            write_output(outdir, sfname, fmt )
+          sfname <- paste0(stub, "_", nums[isroi], ".", tolower(fmt))          
+          if (fmt %in% "STL" & !reprint){
+            if (!writefiles){
+              stop("Specified no reprinting but no writing files - not sure what to do")
+            }
+            write_output(outdir, sfname, fmt, reprint=reprint, 
+                         scene=list(iirgl))
+          } else {
+            drawScene.rgl(iirgl)
+            if (writefiles) {
+              write_output(outdir, sfname, fmt, reprint=reprint )
+            }            
           }
       }
     } ## end list
