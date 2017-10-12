@@ -20,6 +20,7 @@
 #' @param colors - character vector of colors (col2rgb is applied)
 #' @param index.file - template html file used
 #' @param toggle - (experimental) "checkbox" (default) or "radio" for radio or checkboxes to switch thing 
+#' @param xtkgui - (experimental) Logical to use xtkgui for objects
 #' @export
 #' @import rgl
 #' @import oro.nifti
@@ -27,18 +28,51 @@
 #' @seealso \code{\link{writeOBJ}}, \code{\link{writeSTL}}, 
 #' \code{\link{contour3d}}
 #' @return NULL
-
-
-
-write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames, 
-                         visible=TRUE, 
-                         opacity = 1, 
-                         colors = NULL,
-                         captions = "",
-                         standalone=FALSE,
-                         rescale=FALSE,
-                         index.file=system.file("index_template.html", 
-                                                package="brainR"), toggle="checkbox"){
+#' @examples 
+#'
+#' template <- readNIfTI(system.file("MNI152_T1_8mm_brain.nii.gz", package="brainR")
+#' , reorient=FALSE)
+#' dtemp <- dim(template)
+#' ### 4500 - value that empirically value that presented a brain with gyri
+#' ### lower values result in a smoother surface
+#' brain <- contour3d(template, x=1:dtemp[1], y=1:dtemp[2],
+#' z=1:dtemp[3], level = 4500, alpha = 0.8, draw = FALSE)
+#'
+#' ### Example data courtesy of Daniel Reich
+#' ### Each visit is a binary mask of lesions in the brain
+#' imgs <- paste("Visit_", 1:5, "_8mm.nii.gz", sep="")
+#' files <- sapply(imgs, system.file, package='brainR')
+#' scene <- list(brain)
+#' ## loop through images and thresh
+#' nimgs <- length(imgs)
+#' cols <- rainbow(nimgs)
+#' for (iimg in 1:nimgs) {
+#' mask <- readNIfTI(files[iimg], reorient=FALSE)
+#' if (length(dim(mask)) > 3) mask <- mask[,,,1]
+#' ### use 0.99 for level of mask - binary
+#'   activation <- contour3d(mask, level = c(0.99), alpha = 1,
+#'   add = TRUE, color=cols[iimg], draw=FALSE)
+#' ## add these triangles to the list
+#' scene <- c(scene, list(activation))
+#' }
+#' ## make output image names from image names
+#' fnames <- c("brain.stl", gsub(".nii.gz", ".stl", imgs, fixed=TRUE))
+#' outfile <-  "index_4D_stl.html"
+#' write4D.file(
+#' scene=scene, fnames=fnames, 
+#' visible = FALSE,
+#' outfile=outfile, standalone=TRUE, rescale=TRUE)
+write4D.file <- function(
+  scene=NULL, outfile="index_4D.html", fnames, 
+  visible=TRUE, 
+  opacity = 1, 
+  colors = NULL,
+  captions = "",
+  standalone=FALSE,
+  rescale=FALSE,
+  index.file=system.file("index_template.html", 
+                         package="brainR"), 
+  toggle="checkbox", xtkgui = FALSE){
   
   
   stopifnot(!is.null(scene))
@@ -147,6 +181,12 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
              paste0(rname, ".caption = '", cap, "';"))   
     
     
+    rguiname = paste0(rname, "GUI")
+    guicmd = sprintf("var %s = gui.addFolder('%s');", rguiname, cap)
+    guicmd = c(guicmd, paste0(rguiname, ".add(", rname, ", 'visible');"))
+    guicmd = c(guicmd, paste0(rguiname, ".add(", rname, ", 'opacity', 0, 1);"))
+    guicmd = c(guicmd, paste0(rguiname, ".addColor(", rname, ", 'color');"))
+    #     guicmd = c(guicmd, paste0(rguiname, ".open()"))
     
     ### options not yet implemented
     cols <- paste0(param$colors, collapse=", ")
@@ -159,13 +199,16 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
              paste0(rname, ".opacity = ", opp, ";"))
     
     ## just nice formatting for the html to indent
-    cmd <- paste0(indent, cmd)             
-    return(cmd)
+    cmd <- paste0(indent, cmd)
+    guicmd = paste0(indent, guicmd)
+    #     if (xtkgui) cmd = c(cmd, guicmd)
+    return(list(cmd=cmd, guicmd=guicmd))
+    
     
   }
   
   iroi <- 1
-  inputs <- cmds <- NULL
+  guicmds <- inputs <- cmds <- NULL
   for (iroi in 1:nrois) {
     ### allow you to set all the controls for the images
     rclass <- classes[iroi]
@@ -177,7 +220,9 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
     if (rclass == "Triangles3D"){
       param <- list(opacity = unlist(params$opacity[iroi]), 
                     visible = params$visible[iroi], captions= params$captions[iroi], colors=cols)			
-      cmd <- pusher(rname, fname, param, pushto= "scene")
+      topush = pusher(rname, fname, param, pushto= "scene")
+      cmd <- topush$cmd
+      guicmd = topush$guicmd
     }
     if (rclass == "list"){
       
@@ -187,11 +232,19 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
       cmd <- c(cmd, paste0(rname, ".visible = ", vis, ";"), "")
       for (isubroi in 1:length(fname)){
         param <- list(opacity = unlist(params$opacity[iroi])[isubroi], 
-                      visible = params$visible[iroi], captions= params$captions[iroi], colors=cols[isubroi,])		
+                      visible = params$visible[iroi], captions= params$captions[iroi], 
+                      colors=cols[isubroi,])		
         rrname <- paste0(rname, "_", isubroi)
         ffname <- fname[isubroi]
-        cmd <- c(cmd, pusher(rrname, ffname, param, pushto= rname), "")
+        topush = pusher(rrname, ffname, param, pushto= rname)
+        cmd <- c(cmd, topush$cmd, "")
       }
+      param <- list(opacity = 1, 
+                    visible = TRUE, captions= params$captions[iroi], 
+                    colors= "white")     
+      topush = pusher(rname, fname, param, pushto= "blah")
+      guicmd <- topush$guicmd
+      
     }
     
     
@@ -205,9 +258,9 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
     if (iroi == 1) {
       input <- make_input(roiname=rname, caption=cap, vis=vis, toggle= "checkbox")
     } else {
-#       print(iroi)
+      #       print(iroi)
       if (!(toggle %in% "slider")) {
-#         print('making input')
+        #         print('making input')
         input <- make_input(roiname=rname, caption=cap,
                             vis=vis, toggle= toggle)
       }
@@ -215,45 +268,78 @@ write4D.file <- function(scene=NULL, outfile="index_4D.html", fnames,
     inputs <- c(inputs, input)
     
     cmds <- c(cmds, "", cmd)
+    guicmds <- c(guicmds, "", guicmd)
     
   }
   
   if ((toggle %in% "slider") & nrois > 1){
-#     print(toggle)
+    #     print(toggle)
     inputs = c(inputs, 
                paste0('<input id="defaultSlider" type="range" min="2" max="', 
-               nrois, 
-               '" step="1" value="2" onchange="GetSliderItem(', 
-               "'defaultSlider'", 
-               ');" />'))
+                      nrois, 
+                      '" step="1" value="2" onchange="GetSliderItem(', 
+                      "'defaultSlider'", 
+                      ');" />'))
   }
   
   ### add in the commands to the html
-  htmltmp <- c(htmltmp[1:(add_roi-1)], cmds, htmltmp[(add_roi+1):length(htmltmp)])
+  htmltmp <- c(htmltmp[1:(add_roi-1)], cmds, 
+               htmltmp[(add_roi+1):length(htmltmp)])
   roinames <- "'ROI1'"
   if (nrois > 1) roinames <- paste0("'ROI", 2:nrois, "'", collapse = ", ")
+  
+  
+  addgui <- grep("%ADDGUI%", htmltmp)
+  if (xtkgui) {
+    htmltmp <- c(htmltmp[1:(addgui -1)], 
+                 "var gui = new dat.GUI();", 
+                 guicmds,
+                 htmltmp[(addgui+1):length(htmltmp)])
+  } else {
+    htmltmp <- c(htmltmp[1:(addgui -1)], 
+                 htmltmp[(addgui+1):length(htmltmp)])
+  }
+  
   addlist <- grep("%ADDROILIST%", htmltmp)
   htmltmp[addlist] <- gsub("%ADDROILIST%", roinames, htmltmp[addlist])
-
+  
+  if (xtkgui){
+    rmbrainopac <- grep("%BRAINOPAC%", htmltmp)
+    htmltmp <- c(htmltmp[1:(rmbrainopac-1)], 
+                 htmltmp[(rmbrainopac+1):length(htmltmp)])
+    ### remove text box
+    rmbrainopac <- grep("range_brain", htmltmp)
+    htmltmp <- c(htmltmp[1:(rmbrainopac-1)], 
+                 htmltmp[(rmbrainopac+1):length(htmltmp)])    
+  }
   ## set opacity
   htmltmp <- gsub("%BRAINOPAC%", copac[1], htmltmp)
   
   ## add checkboxes for control
   addbox <- grep("%ADDCHECKBOXES%", htmltmp)
-#   print(inputs)
-  htmltmp <- c(htmltmp[1:(addbox-1)], inputs, htmltmp[(addbox+1):length(htmltmp)])
+  #   print(inputs)
+  if (!xtkgui){
+    htmltmp <- c(htmltmp[1:(addbox-1)], inputs, 
+                 htmltmp[(addbox+1):length(htmltmp)])
+  } else {
+    htmltmp <- c(htmltmp[1:(addbox-1)], 
+                 htmltmp[(addbox+1):length(htmltmp)])    
+  }
   
   ## put in the other xtk_edge stuff if standalone
   outdir <- dirname(outfile)
   if (standalone) {
     htmltmp <- gsub("http://get.goxtk.com/xtk_edge.js", "xtk_edge.js", 
                     htmltmp, fixed=TRUE)
+    htmltmp <- gsub("http://get.goXTK.com/xtk_xdat.gui.js", "xtk_xdat.gui.js", 
+                    htmltmp, fixed=TRUE)    
+    file.copy(from=system.file("xtk_xdat.gui.js", package="brainR"), 
+              to=file.path(outdir, "xtk_xdat.gui.js") )
     file.copy(from=system.file("xtk_edge.js", package="brainR"), 
-                  to=file.path(outdir, "xtk_edge.js") )
+              to=file.path(outdir, "xtk_edge.js") )    
     ### copy xtk_edge.js to file
   }  
   writeLines(htmltmp, con=outfile, sep="\n")
   
   return(invisible(NULL))
 }
-  
