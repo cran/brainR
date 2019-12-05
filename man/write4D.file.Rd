@@ -4,11 +4,20 @@
 \alias{write4D.file}
 \title{Write a 4D scene}
 \usage{
-write4D.file(scene = NULL, outfile = "index_4D.html", fnames,
-  visible = TRUE, opacity = 1, colors = NULL, captions = "",
-  standalone = FALSE, rescale = FALSE,
+write4D.file(
+  scene = NULL,
+  outfile = "index_4D.html",
+  fnames,
+  visible = TRUE,
+  opacity = 1,
+  colors = NULL,
+  captions = "",
+  standalone = FALSE,
+  rescale = FALSE,
   index.file = system.file("index_template.html", package = "brainR"),
-  toggle = "checkbox", xtkgui = FALSE)
+  toggle = "checkbox",
+  xtkgui = FALSE
+)
 }
 \arguments{
 \item{scene}{- list of 3D triangles (see \link[misc3d]{contour3d}).  If a multicolored
@@ -24,7 +33,7 @@ be the same length as scene}
 html file}
 
 \item{opacity}{- list of alpha values - same length as scene; if sub-structures
-are present, then the each list element has length the numer of structures}
+are present, then the each list element has length the number of structures}
 
 \item{colors}{- character vector of colors (col2rgb is applied)}
 
@@ -73,11 +82,17 @@ scene <- c(scene, list(activation))
 }
 ## make output image names from image names
 fnames <- c("brain.stl", gsub(".nii.gz", ".stl", imgs, fixed=TRUE))
-outfile <-  "index_4D_stl.html"
+fnames = file.path(tempdir(), fnames)
+outfile <-  file.path(tempdir(), "index.html")
 write4D.file(
 scene=scene, fnames=fnames, 
 visible = FALSE,
 outfile=outfile, standalone=TRUE, rescale=TRUE)
+
+
+
+unlink(outfile)
+unlink(fnames)
 }
 \seealso{
 \code{\link{writeOBJ}}, \code{\link{writeSTL}}, 
